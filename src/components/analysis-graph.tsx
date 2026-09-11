@@ -18,7 +18,7 @@ import { severityOf } from "@/lib/severity";
 const MIN_K = 0.4;
 const MAX_K = 2;
 
-interface AnalysisNode extends GraphLayoutNode {
+export interface AnalysisNode extends GraphLayoutNode {
   label: string;
   sub?: string;
   count?: number;

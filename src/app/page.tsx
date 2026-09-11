@@ -1,69 +1,159 @@
-import Image from "next/image";
+"use client";
+
+import { Pulse } from "@phosphor-icons/react";
+import { MotionConfig } from "motion/react";
+import { useCallback, useRef, useState } from "react";
+import AnalysisGraph, { type AnalysisNode } from "@/components/analysis-graph";
+import Hero from "@/components/hero";
+import ScanLive from "@/components/scan-live";
+import SummaryCascade from "@/components/summary-cascade";
+import ThemeToggle from "@/components/theme-toggle";
+
+type Phase = "idle" | "loading" | "revealing" | "done";
+type View = "summary" | "graph";
+
+interface AnalyzeSummary {
+  domain: string;
+  status: number;
+  loadTimeMs: number;
+  sizeKb: number;
+  https: boolean;
+  scriptsTotal: number;
+  scriptsThirdParty: number;
+  externalDomains: number;
+  trackers: number;
+  cookies: number;
+  privacy: string[];
+  headers: { name: string; value: string }[];
+}
+
+interface AnalyzeResult {
+  summary: AnalyzeSummary;
+  nodes: AnalysisNode[];
+  rootId: string;
+}
 
 export default function Home() {
+  const [result, setResult] = useState<AnalyzeResult | null>(null);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [error, setError] = useState("");
+  const [scanHost, setScanHost] = useState("");
+  const [view, setView] = useState<View>("graph");
+  const resultsRef = useRef<HTMLElement>(null);
+
+  const handleRevealed = useCallback(() => setPhase("done"), []);
+
+  const analyze = async (url: string) => {
+    setScanHost(url.replace(/^https?:\/\//i, "").split("/")[0] || url);
+    setResult(null);
+    setError("");
+    setPhase("loading");
+    try {
+      const res = await fetch("/api/analyze-url", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.nodes) {
+        throw new Error(data?.error || "Respuesta inesperada del análisis.");
+      }
+      setResult(data);
+      setPhase("revealing");
+      setTimeout(
+        () => resultsRef.current?.scrollIntoView({ behavior: "smooth" }),
+        120,
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "No se pudo analizar la URL.",
+      );
+      setPhase("idle");
+    }
+  };
+
+  const busy = phase === "loading" || phase === "revealing";
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <MotionConfig reducedMotion="user">
+      <div className="min-h-screen">
+        <header className="mx-auto flex max-w-6xl items-center justify-between px-4 pt-6">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-7 w-7 place-items-center rounded-md bg-signal-soft text-signal">
+              <Pulse className="h-4 w-4" />
+            </span>
+            <p className="font-heading text-lg font-semibold tracking-tight text-ink">
+              Signal
+            </p>
+          </div>
+          <div className="flex items-center gap-4">
+            <p className="hidden font-mono text-[10px] uppercase tracking-[0.25em] text-mist sm:block">
+              web surface analysis
+            </p>
+            <ThemeToggle />
+          </div>
+        </header>
+
+        <Hero onAnalyze={analyze} loading={busy} error={error} />
+
+        <main
+          ref={resultsRef}
+          className="mx-auto max-w-6xl scroll-mt-8 px-4 pb-24"
+        >
+          {busy && (
+            <div className="flex justify-center pt-2 pb-8">
+              <ScanLive
+                host={scanHost}
+                result={phase === "revealing" ? result : null}
+                onDone={handleRevealed}
+              />
+            </div>
+          )}
+          {phase === "done" && result && (
+            <div className="space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex rounded-full border border-line p-0.5 font-mono text-[11px] lowercase">
+                  <button
+                    type="button"
+                    onClick={() => setView("summary")}
+                    className={`rounded-full px-3.5 py-1 transition-colors ${view === "summary" ? "bg-ink" : "text-mist hover:text-ink"}`}
+                    style={
+                      view === "summary" ? { color: "var(--bg)" } : undefined
+                    }
+                  >
+                    resumen
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setView("graph")}
+                    className={`rounded-full px-3.5 py-1 transition-colors ${view === "graph" ? "bg-ink" : "text-mist hover:text-ink"}`}
+                    style={
+                      view === "graph" ? { color: "var(--bg)" } : undefined
+                    }
+                  >
+                    grafo
+                  </button>
+                </div>
+                <p className="hidden font-mono text-[10px] tabular-nums text-mist sm:block">
+                  {result.summary.domain} · {result.summary.scriptsTotal}{" "}
+                  scripts · {result.summary.trackers} trackers
+                </p>
+              </div>
+              {view === "summary" ? (
+                <SummaryCascade result={result} />
+              ) : (
+                <AnalysisGraph result={result} />
+              )}
+            </div>
+          )}
+        </main>
+
+        <footer className="border-t border-line py-8 text-center">
+          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-mist">
+            Signal · diagnóstico de superficie web
           </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+        </footer>
+      </div>
+    </MotionConfig>
   );
 }
