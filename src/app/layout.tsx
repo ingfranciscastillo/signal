@@ -4,9 +4,19 @@ import localFont from "next/font/local";
 import "./globals.css";
 
 const generalSans = localFont({
-  src: "../../public/GeneralSans-Variable.woff2",
+  src: [
+    {
+      path: "../../public/GeneralSans-Variable.woff2",
+      weight: "200 700",
+      style: "normal",
+    },
+    {
+      path: "../../public/GeneralSans-VariableItalic.woff2",
+      weight: "200 700",
+      style: "italic",
+    },
+  ],
   variable: "--font-general-sans",
-  weight: "200 700",
   display: "swap",
 });
 
