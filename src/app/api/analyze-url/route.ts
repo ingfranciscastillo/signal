@@ -244,6 +244,84 @@ const TECH_SIGNATURES: TechSignature[] = [
     kind: "tech",
     match: ["cookiebot"],
   },
+  {
+    name: "Google Ad Manager / DoubleClick",
+    category: "Publicidad",
+    kind: "tracker",
+    match: ["doubleclick.net", "googlesyndication.com", "googleadservices.com"],
+  },
+  {
+    name: "Criteo",
+    category: "Publicidad",
+    kind: "tracker",
+    match: ["criteo.com", "criteo.net"],
+  },
+  {
+    name: "Taboola",
+    category: "Publicidad",
+    kind: "tracker",
+    match: ["taboola.com"],
+  },
+  {
+    name: "Outbrain",
+    category: "Publicidad",
+    kind: "tracker",
+    match: ["outbrain.com"],
+  },
+  {
+    name: "Amazon Ads",
+    category: "Publicidad",
+    kind: "tracker",
+    match: ["amazon-adsystem.com"],
+  },
+  {
+    name: "PubMatic",
+    category: "Publicidad",
+    kind: "tracker",
+    match: ["pubmatic.com"],
+  },
+  {
+    name: "OpenX",
+    category: "Publicidad",
+    kind: "tracker",
+    match: ["openx.net"],
+  },
+  {
+    name: "Magnite (Rubicon)",
+    category: "Publicidad",
+    kind: "tracker",
+    match: ["rubiconproject.com"],
+  },
+  {
+    name: "Index Exchange",
+    category: "Publicidad",
+    kind: "tracker",
+    match: ["casalemedia.com", "indexexchange.com"],
+  },
+  {
+    name: "comScore",
+    category: "Analytics",
+    kind: "tracker",
+    match: ["scorecardresearch.com"],
+  },
+  {
+    name: "Chartbeat",
+    category: "Analytics",
+    kind: "analytics",
+    match: ["chartbeat.com", "chartbeat.net"],
+  },
+  {
+    name: "Optimizely",
+    category: "Analytics",
+    kind: "analytics",
+    match: ["optimizely.com"],
+  },
+  {
+    name: "Permutive",
+    category: "Analytics",
+    kind: "analytics",
+    match: ["permutive.com"],
+  },
 ];
 
 const TRACKER_SUBSTRINGS = [
@@ -507,15 +585,25 @@ export async function POST(req: Request) {
       const externalDomains = Object.values(domainMap).filter(
         (d) => !isFirstParty(d.host),
       );
-      const scriptDomains = externalDomains
-        .filter((d) => (d.types.script || 0) + (d.types.iframe || 0) > 0)
-        .sort(
-          (a, b) =>
-            (b.types.script || 0) +
-            (b.types.iframe || 0) -
-            (a.types.script || 0) -
-            (a.types.iframe || 0),
-        );
+      // Ordenados por severidad primero (tracker > analytics > resto) y luego por volumen de
+      // requests: muchos trackers reales solo disparan un píxel/XHR (0 scripts, 0 iframes), así
+      // que filtrar/ordenar por script+iframe los dejaba fuera del grafo aunque sí contaban en
+      // summary.trackers.
+      const DOMAIN_CLASS_WEIGHT: Record<DomainClass, number> = {
+        tracker: 0,
+        analytics: 1,
+        other: 2,
+        font: 3,
+      };
+      const totalRequests = (d: DomainEntry) =>
+        Object.values(d.types).reduce((a, b) => a + b, 0);
+      const rankedDomains = [...externalDomains].sort((a, b) => {
+        const ca = classifyDomain(`${a.host} ${a.urls[0] || ""}`.toLowerCase());
+        const cb = classifyDomain(`${b.host} ${b.urls[0] || ""}`.toLowerCase());
+        if (DOMAIN_CLASS_WEIGHT[ca] !== DOMAIN_CLASS_WEIGHT[cb])
+          return DOMAIN_CLASS_WEIGHT[ca] - DOMAIN_CLASS_WEIGHT[cb];
+        return totalRequests(b) - totalRequests(a);
+      });
       const fontDomains = externalDomains.filter((d) =>
         FONT_SUBSTRINGS.some((s) =>
           `${d.host} ${d.urls[0] || ""}`.toLowerCase().includes(s),
@@ -679,7 +767,7 @@ export async function POST(req: Request) {
         });
       }
 
-      if (scriptDomains.length) {
+      if (rankedDomains.length) {
         const catId = push({
           kind: "category",
           label: "Scripts de terceros",
@@ -687,10 +775,10 @@ export async function POST(req: Request) {
           parent: rootId,
           details: {
             description:
-              "Dominios externos cuyos scripts e iframes se cargaron durante el render.",
+              "Dominios externos con actividad detectada durante el render (scripts, píxeles, llamadas de red).",
           },
         });
-        scriptDomains.slice(0, 8).forEach((d) => {
+        rankedDomains.slice(0, 10).forEach((d) => {
           const k = classifyDomain(
             `${d.host} ${d.urls[0] || ""}`.toLowerCase(),
           );
@@ -703,7 +791,7 @@ export async function POST(req: Request) {
                 : k === "analytics"
                   ? "analytics"
                   : "terceros",
-            count: (d.types.script || 0) + (d.types.iframe || 0),
+            count: totalRequests(d),
             parent: catId,
             details: {
               urls: d.urls,
