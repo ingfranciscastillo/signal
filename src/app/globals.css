@@ -57,14 +57,16 @@
   --color-node-neutral: var(--node-neutral);
 }
 
-@theme {
+@theme inline {
   /* Tipografía: sans geométrica para UI, mono para datos técnicos */
-  --font-heading: "General Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-body: "General Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "General Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-heading:
+    var(--font-general-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-body: var(--font-general-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display:
+    var(--font-general-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono:
-    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-    monospace;
+    var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
 }
 
 @layer base {
