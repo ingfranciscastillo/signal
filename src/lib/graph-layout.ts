@@ -2,14 +2,9 @@
 
 export interface GraphLayoutNode {
   id: string;
-  parent?: string;
+  parent: string | null;
   kind: string;
   [key: string]: unknown;
-}
-
-export interface PositionedGraphNode extends GraphLayoutNode {
-  x: number;
-  y: number;
 }
 
 export interface GraphLayoutEdge {
@@ -17,8 +12,8 @@ export interface GraphLayoutEdge {
   to: string;
 }
 
-export interface GraphLayoutResult {
-  positioned: PositionedGraphNode[];
+export interface GraphLayoutResult<T extends GraphLayoutNode> {
+  positioned: (T & { x: number; y: number })[];
   positions: Record<string, { x: number; y: number }>;
   edges: GraphLayoutEdge[];
   width: number;
@@ -31,13 +26,13 @@ const HALF_HEIGHT: Record<string, number> = { root: 24, category: 20 };
 export const nodeHalfHeight = (node?: { kind?: string } | null) =>
   HALF_HEIGHT[node?.kind ?? ""] ?? 16;
 
-export function layoutGraph(
-  nodes: GraphLayoutNode[],
+export function layoutGraph<T extends GraphLayoutNode>(
+  nodes: T[],
   expandedIds: Set<string>,
   rootId: string,
-): GraphLayoutResult {
-  const childrenMap: Record<string, GraphLayoutNode[]> = {};
-  const byId: Record<string, GraphLayoutNode> = {};
+): GraphLayoutResult<T> {
+  const childrenMap: Record<string, T[]> = {};
+  const byId: Record<string, T> = {};
   nodes.forEach((n) => {
     byId[n.id] = n;
     if (n.parent) {
@@ -47,7 +42,7 @@ export function layoutGraph(
   });
 
   const depths: Record<string, number> = { [rootId]: 0 };
-  const visible: GraphLayoutNode[] = [];
+  const visible: T[] = [];
   const queue: string[] = [rootId];
   while (queue.length) {
     const id = queue.shift();
