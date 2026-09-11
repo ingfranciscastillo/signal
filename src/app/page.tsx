@@ -1,11 +1,11 @@
 "use client";
 
-import { Pulse } from "@phosphor-icons/react";
 import { MotionConfig } from "motion/react";
 import { useCallback, useRef, useState } from "react";
 import AnalysisGraph, { type AnalysisNode } from "@/components/analysis-graph";
 import Hero from "@/components/hero";
 import ScanLive from "@/components/scan-live";
+import SignalMark from "@/components/signal-mark";
 import SummaryCascade from "@/components/summary-cascade";
 import ThemeToggle from "@/components/theme-toggle";
 
@@ -80,7 +80,7 @@ export default function Home() {
         <header className="mx-auto flex max-w-6xl items-center justify-between px-4 pt-6">
           <div className="flex items-center gap-2.5">
             <span className="grid h-7 w-7 place-items-center rounded-md bg-signal-soft text-signal">
-              <Pulse className="h-4 w-4" />
+              <SignalMark className="h-4 w-4" />
             </span>
             <p className="font-heading text-lg font-semibold tracking-tight text-ink">
               Signal
