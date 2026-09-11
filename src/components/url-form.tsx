@@ -3,7 +3,7 @@
 import { ArrowRight } from "@phosphor-icons/react";
 import { useState } from "react";
 
-interface UrlFormProps {
+export interface UrlFormProps {
   onAnalyze: (url: string) => void;
   loading: boolean;
   error?: string | null;
