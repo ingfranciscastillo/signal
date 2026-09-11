@@ -33,6 +33,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
+      suppressHydrationWarning
       lang="en"
       className={`${generalSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >

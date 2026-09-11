@@ -1,4 +1,13 @@
 // Signal · analyzeUrl — inspecciona la superficie de una web y construye el grafo de relaciones.
+//
+// Renderiza la página con un navegador headless (Playwright) en vez de solo leer el HTML
+// crudo: la mayoría de scripts de terceros, tags de GTM y trackers se inyectan vía JS después
+// de la carga inicial, así que un fetch() plano los pierde casi todos.
+
+import { type Browser, chromium } from "playwright";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 interface TechSignature {
   name: string;
@@ -331,6 +340,30 @@ interface AnalyzeRequestBody {
   url?: unknown;
 }
 
+const USER_AGENT =
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
+// Reutilizado entre requests (arrancar Chromium cuesta ~1-2s): es un pool de un recurso
+// compartido, como una conexión de DB, no estado propio de una petición — cada análisis
+// abre su propio browser CONTEXT (aislado: cookies/caché propias) y lo cierra al terminar.
+let browserPromise: Promise<Browser> | null = null;
+function getBrowser(): Promise<Browser> {
+  if (!browserPromise) {
+    browserPromise = chromium.launch({
+      headless: true,
+      args: ["--disable-dev-shm-usage"],
+    });
+  }
+  return browserPromise;
+}
+
+interface CapturedRequest {
+  url: string;
+  resourceType: string;
+  isMainFrame: boolean;
+  at: number;
+}
+
 export async function POST(req: Request) {
   try {
     let body: AnalyzeRequestBody;
@@ -361,387 +394,408 @@ export async function POST(req: Request) {
       );
     }
 
-    let res: Response;
+    const browser = await getBrowser();
+    const context = await browser.newContext({
+      userAgent: USER_AGENT,
+      viewport: { width: 1280, height: 800 },
+      ignoreHTTPSErrors: true,
+    });
+    context.setDefaultNavigationTimeout(20000);
+    context.setDefaultTimeout(10000);
+
     try {
-      res = await fetch(target.toString(), {
-        redirect: "follow",
-        headers: {
-          "user-agent":
-            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-          accept: "text/html,application/xhtml+xml",
-        },
+      const page = await context.newPage();
+
+      const requests: CapturedRequest[] = [];
+      let domReadyAt = 0;
+      page.on("request", (request) => {
+        requests.push({
+          url: request.url(),
+          resourceType: request.resourceType(),
+          isMainFrame: request.frame() === page.mainFrame(),
+          at: Date.now(),
+        });
       });
-    } catch {
-      return Response.json(
-        { error: `No se pudo conectar con ${target.hostname}.` },
-        { status: 502 },
-      );
-    }
+      page.once("domcontentloaded", () => {
+        domReadyAt = Date.now();
+      });
 
-    const started = Date.now();
-    const html = await res.text();
-    const loadTimeMs = Date.now() - started;
-    const finalUrl = res.url || target.toString();
-    const finalParsed = new URL(finalUrl);
-    const rootHost = finalParsed.hostname;
-    const scan = html.slice(0, 5000000);
-    const lower = scan.toLowerCase();
-
-    const rootLabels = rootHost.split(".");
-    const rootSuffix =
-      rootLabels.length >= 2 ? rootLabels.slice(-2).join(".") : rootHost;
-    const isFirstParty = (host: string) =>
-      host === rootHost || host.endsWith(`.${rootSuffix}`);
-
-    // --- extracción de recursos ---
-    // Se captura el tag completo para exponer el tipo de carga (async/defer → lazy) de cada script.
-    const scriptTags = [
-      ...scan.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi),
-    ].map((m) => ({ src: m[1], tag: m[0] }));
-    const scripts = scriptTags.map((s) => s.src);
-    const iframes = [
-      ...scan.matchAll(/<iframe\b[^>]*\bsrc=["']([^"']+)["']/gi),
-    ].map((m) => m[1]);
-    const linkTags = [...scan.matchAll(/<link\b[^>]*>/gi)].map((m) => m[0]);
-    const stylesheets = linkTags
-      .filter((t) => /stylesheet|preload|preconnect|dns-prefetch/i.test(t))
-      .map((t) => (t.match(/href=["']([^"']+)["']/i) || [])[1])
-      .filter((u): u is string => Boolean(u));
-    const images = [
-      ...scan.matchAll(/<(?:img|source)\b[^>]*\bsrc=["'](https?:[^"']+)["']/gi),
-    ].map((m) => m[1]);
-
-    const titleMatch = scan.match(/<title[^>]*>([^<]{1,200})<\/title>/i);
-    const title = titleMatch ? titleMatch[1].trim() : "";
-
-    // --- agregación por dominio ---
-    const domainMap: Record<string, DomainEntry> = {};
-    const addResource = (url: string, type: string, tag?: string) => {
-      let u: URL;
+      const started = Date.now();
+      let response: Awaited<ReturnType<typeof page.goto>>;
       try {
-        u = new URL(url, finalUrl);
+        response = await page.goto(target.toString(), {
+          waitUntil: "domcontentloaded",
+          timeout: 20000,
+        });
       } catch {
-        return;
+        return Response.json(
+          { error: `No se pudo conectar con ${target.hostname}.` },
+          { status: 502 },
+        );
       }
-      if (!u.hostname) return;
-      const key = u.hostname;
-      if (!domainMap[key])
-        domainMap[key] = { host: key, urls: [], types: {}, lazy: 0, direct: 0 };
-      const d = domainMap[key];
-      d.types[type] = (d.types[type] || 0) + 1;
-      if (tag) {
-        if (/async|defer/i.test(tag)) d.lazy += 1;
+      if (!response) {
+        return Response.json(
+          { error: `No se pudo conectar con ${target.hostname}.` },
+          { status: 502 },
+        );
+      }
+
+      // deja un margen para que tags cargados de forma diferida (GTM, trackers async) disparen,
+      // sin bloquear indefinidamente en páginas que nunca llegan a estar "quietas" en red.
+      await page
+        .waitForLoadState("networkidle", { timeout: 8000 })
+        .catch(() => {});
+      const loadTimeMs = Date.now() - started;
+
+      const html = await page.content();
+      const title = await page.title();
+      const finalUrl = page.url();
+      const finalParsed = new URL(finalUrl);
+      const rootHost = finalParsed.hostname;
+      const status = response.status();
+      const responseHeaders = response.headers();
+      const cookies = await context.cookies();
+
+      const rootLabels = rootHost.split(".");
+      const rootSuffix =
+        rootLabels.length >= 2 ? rootLabels.slice(-2).join(".") : rootHost;
+      const isFirstParty = (host: string) =>
+        host === rootHost || host.endsWith(`.${rootSuffix}`);
+
+      const scanText =
+        `${html} ${requests.map((r) => r.url).join(" ")}`.toLowerCase();
+
+      // --- agregación por dominio, a partir de requests de red reales (post-ejecución de JS) ---
+      const domainMap: Record<string, DomainEntry> = {};
+      const addResource = (url: string, type: string, isLazy: boolean) => {
+        let u: URL;
+        try {
+          u = new URL(url);
+        } catch {
+          return;
+        }
+        if (!u.hostname) return;
+        const key = u.hostname;
+        if (!domainMap[key])
+          domainMap[key] = {
+            host: key,
+            urls: [],
+            types: {},
+            lazy: 0,
+            direct: 0,
+          };
+        const d = domainMap[key];
+        d.types[type] = (d.types[type] || 0) + 1;
+        if (isLazy) d.lazy += 1;
         else d.direct += 1;
+        if (d.urls.length < 10) d.urls.push(u.toString().slice(0, 200));
+      };
+
+      const scriptRequests = requests.filter(
+        (r) => r.resourceType === "script",
+      );
+      for (const r of requests) {
+        if (r.resourceType === "document" && r.isMainFrame) continue; // la navegación principal, no un recurso
+        const type =
+          r.resourceType === "document" && !r.isMainFrame
+            ? "iframe"
+            : r.resourceType;
+        const isLazy = domReadyAt > 0 && r.at > domReadyAt;
+        addResource(r.url, type, isLazy);
       }
-      if (d.urls.length < 10) d.urls.push(u.toString().slice(0, 200));
-    };
-    scriptTags.forEach((s) => {
-      addResource(s.src, "script", s.tag);
-    });
-    stylesheets.forEach((u) => {
-      addResource(u, "stylesheet");
-    });
-    iframes.forEach((u) => {
-      addResource(u, "iframe");
-    });
-    images.forEach((u) => {
-      addResource(u, "image");
-    });
 
-    const externalDomains = Object.values(domainMap).filter(
-      (d) => !isFirstParty(d.host),
-    );
-    const scriptDomains = externalDomains
-      .filter((d) => (d.types.script || 0) + (d.types.iframe || 0) > 0)
-      .sort(
-        (a, b) =>
-          (b.types.script || 0) +
-          (b.types.iframe || 0) -
-          (a.types.script || 0) -
-          (a.types.iframe || 0),
+      const externalDomains = Object.values(domainMap).filter(
+        (d) => !isFirstParty(d.host),
       );
-    const fontDomains = externalDomains.filter((d) =>
-      FONT_SUBSTRINGS.some((s) =>
-        `${d.host} ${d.urls[0] || ""}`.toLowerCase().includes(s),
-      ),
-    );
+      const scriptDomains = externalDomains
+        .filter((d) => (d.types.script || 0) + (d.types.iframe || 0) > 0)
+        .sort(
+          (a, b) =>
+            (b.types.script || 0) +
+            (b.types.iframe || 0) -
+            (a.types.script || 0) -
+            (a.types.iframe || 0),
+        );
+      const fontDomains = externalDomains.filter((d) =>
+        FONT_SUBSTRINGS.some((s) =>
+          `${d.host} ${d.urls[0] || ""}`.toLowerCase().includes(s),
+        ),
+      );
 
-    const thirdPartyScripts = scripts.filter((u) => {
-      try {
-        return !isFirstParty(new URL(u, finalUrl).hostname);
-      } catch {
-        return false;
+      const thirdPartyScripts = scriptRequests.filter((r) => {
+        try {
+          return !isFirstParty(new URL(r.url).hostname);
+        } catch {
+          return false;
+        }
+      }).length;
+
+      // --- tecnologías ---
+      const techsFound = TECH_SIGNATURES.filter((t) =>
+        t.match.some((s) => scanText.includes(s.toLowerCase())),
+      );
+      const gtm = techsFound.find((t) => t.kind === "tagmanager") || null;
+      const chainTechs = gtm
+        ? techsFound.filter(
+            (t) => t.kind === "analytics" || t.kind === "tracker",
+          )
+        : [];
+      const plainTechs = gtm
+        ? techsFound.filter(
+            (t) =>
+              t.kind !== "tagmanager" &&
+              t.kind !== "analytics" &&
+              t.kind !== "tracker",
+          )
+        : techsFound;
+
+      // --- headers seleccionados ---
+      const headerNames = [
+        "server",
+        "x-powered-by",
+        "content-security-policy",
+        "strict-transport-security",
+        "x-frame-options",
+        "x-content-type-options",
+        "cache-control",
+        "via",
+        "content-type",
+        "referrer-policy",
+        "permissions-policy",
+      ];
+      const headers = headerNames
+        .map((n) => {
+          const v = responseHeaders[n];
+          return v ? { name: n, value: v.slice(0, 180) } : null;
+        })
+        .filter((h): h is { name: string; value: string } => Boolean(h));
+
+      const hasCsp = Boolean(responseHeaders["content-security-policy"]);
+      const https = finalParsed.protocol === "https:";
+      const trackerDomains = externalDomains.filter(
+        (d) =>
+          classifyDomain(`${d.host} ${d.urls[0] || ""}`.toLowerCase()) ===
+          "tracker",
+      );
+      const trackerCount = new Set([
+        ...trackerDomains.map((d) => d.host),
+        ...techsFound.filter((t) => t.kind === "tracker").map((t) => t.name),
+      ]).size;
+      const insecureCookies = cookies.filter(
+        (c) => !c.secure || !c.httpOnly,
+      ).length;
+
+      // --- privacidad ---
+      const privacy: string[] = [];
+      if (trackerCount > 0)
+        privacy.push(
+          `${trackerCount} dominios con capacidad de rastreo publicitario.`,
+        );
+      if (gtm)
+        privacy.push(
+          "Google Tag Manager carga scripts de terceros dinámicamente: el HTML inicial es solo el arranque.",
+        );
+      if (!https) privacy.push("La conexión no viaja cifrada (HTTP).");
+      if (!hasCsp)
+        privacy.push(
+          "Sin Content-Security-Policy: el navegador ejecuta cualquier script que la página cargue.",
+        );
+      if (insecureCookies > 0)
+        privacy.push(`${insecureCookies} cookies sin flag Secure o HttpOnly.`);
+      if (scanText.includes("fingerprint"))
+        privacy.push("Posible fingerprinting de dispositivos.");
+
+      // --- grafo ---
+      let seq = 0;
+      const nodes: BackendGraphNode[] = [];
+      const push = (node: NewGraphNode): string => {
+        const id = `${node.kind}-${seq++}`;
+        nodes.push({ ...node, id });
+        return id;
+      };
+
+      const rootId = push({
+        kind: "root",
+        label: rootHost,
+        parent: null,
+        details: {
+          title,
+          finalUrl,
+          https,
+          status,
+          loadTimeMs,
+          sizeKb: Math.round(html.length / 1024),
+          scriptsTotal: scriptRequests.length,
+          scriptsThirdParty: thirdPartyScripts,
+          thirdPartyDomains: externalDomains.length,
+          trackers: trackerCount,
+          cookies: cookies.length,
+        },
+      });
+
+      let gtmId: string | null = null;
+      if (gtm) {
+        gtmId = push({
+          kind: "tech",
+          label: gtm.name,
+          sub: "Tag Manager",
+          parent: rootId,
+          details: {
+            category: "Tag Manager",
+            description:
+              "Carga tags de terceros dinámicamente después del arranque de la página.",
+          },
+        });
+        chainTechs.slice(0, 8).forEach((t) => {
+          push({
+            kind: "tech",
+            label: t.name,
+            sub: t.category,
+            parent: gtmId,
+            details: { category: t.category },
+          });
+        });
       }
-    }).length;
 
-    // --- tecnologías ---
-    const techsFound = TECH_SIGNATURES.filter((t) =>
-      t.match.some((s) => lower.includes(s)),
-    );
-    const gtm = techsFound.find((t) => t.kind === "tagmanager") || null;
-    const chainTechs = gtm
-      ? techsFound.filter((t) => t.kind === "analytics" || t.kind === "tracker")
-      : [];
-    const plainTechs = gtm
-      ? techsFound.filter(
-          (t) =>
-            t.kind !== "tagmanager" &&
-            t.kind !== "analytics" &&
-            t.kind !== "tracker",
-        )
-      : techsFound;
+      if (plainTechs.length) {
+        const catId = push({
+          kind: "category",
+          label: "Tecnologías",
+          count: plainTechs.length,
+          parent: rootId,
+          details: {
+            description:
+              "Stack detectado por firmas en la superficie renderizada.",
+          },
+        });
+        plainTechs.slice(0, 12).forEach((t) => {
+          push({
+            kind: "tech",
+            label: t.name,
+            sub: t.category,
+            parent: catId,
+            details: { category: t.category },
+          });
+        });
+      }
 
-    // --- cookies ---
-    let setCookies: string[] = [];
-    try {
-      if (typeof res.headers.getSetCookie === "function")
-        setCookies = res.headers.getSetCookie();
-    } catch {}
-    if (!setCookies.length) {
-      const sc = res.headers.get("set-cookie");
-      if (sc) setCookies = sc.split(/,(?=[^;]+?=)/);
-    }
+      if (scriptDomains.length) {
+        const catId = push({
+          kind: "category",
+          label: "Scripts de terceros",
+          count: thirdPartyScripts,
+          parent: rootId,
+          details: {
+            description:
+              "Dominios externos cuyos scripts e iframes se cargaron durante el render.",
+          },
+        });
+        scriptDomains.slice(0, 8).forEach((d) => {
+          const k = classifyDomain(
+            `${d.host} ${d.urls[0] || ""}`.toLowerCase(),
+          );
+          push({
+            kind: k === "tracker" ? "tracker" : "domain",
+            label: d.host,
+            sub:
+              k === "tracker"
+                ? "rastreo"
+                : k === "analytics"
+                  ? "analytics"
+                  : "terceros",
+            count: (d.types.script || 0) + (d.types.iframe || 0),
+            parent: catId,
+            details: {
+              urls: d.urls,
+              types: d.types,
+              kind: k,
+              loadType: d.lazy > d.direct ? "lazy" : "direct",
+            },
+          });
+        });
+      }
 
-    // --- headers seleccionados ---
-    const headerNames = [
-      "server",
-      "x-powered-by",
-      "content-security-policy",
-      "strict-transport-security",
-      "x-frame-options",
-      "x-content-type-options",
-      "cache-control",
-      "via",
-      "content-type",
-      "referrer-policy",
-      "permissions-policy",
-    ];
-    const headers = headerNames
-      .map((n) => {
-        const v = res.headers.get(n);
-        return v ? { name: n, value: v.slice(0, 180) } : null;
-      })
-      .filter((h): h is { name: string; value: string } => Boolean(h));
+      if (cookies.length) {
+        const catId = push({
+          kind: "category",
+          label: "Cookies",
+          count: cookies.length,
+          parent: rootId,
+          details: {
+            description:
+              "Cookies presentes tras la carga completa de la página.",
+          },
+        });
+        cookies.slice(0, 8).forEach((c) => {
+          push({
+            kind: "cookie",
+            label: c.name,
+            sub: c.secure ? "secure" : "sin Secure",
+            parent: catId,
+            details: {
+              raw: `${c.name}=${c.value}`.slice(0, 200),
+              secure: c.secure,
+              httponly: c.httpOnly,
+              samesite: c.sameSite ? c.sameSite.toLowerCase() : null,
+            },
+          });
+        });
+      }
 
-    const hasCsp = Boolean(res.headers.get("content-security-policy"));
-    const https = finalParsed.protocol === "https:";
-    const trackerDomains = externalDomains.filter(
-      (d) =>
-        classifyDomain(`${d.host} ${d.urls[0] || ""}`.toLowerCase()) ===
-        "tracker",
-    );
-    const trackerCount = new Set([
-      ...trackerDomains.map((d) => d.host),
-      ...techsFound.filter((t) => t.kind === "tracker").map((t) => t.name),
-    ]).size;
-    const insecureCookies = setCookies.filter(
-      (c) => !/secure/i.test(c) || !/httponly/i.test(c),
-    ).length;
+      if (fontDomains.length) {
+        const catId = push({
+          kind: "category",
+          label: "Fuentes & assets",
+          count: fontDomains.length,
+          parent: rootId,
+          details: {
+            description: "Tipografías y recursos externos de estilo.",
+          },
+        });
+        fontDomains.slice(0, 6).forEach((d) => {
+          push({
+            kind: "font",
+            label: d.host,
+            sub: "fuente",
+            parent: catId,
+            details: { urls: d.urls, types: d.types },
+          });
+        });
+      }
 
-    // --- privacidad ---
-    const privacy: string[] = [];
-    if (trackerCount > 0)
-      privacy.push(
-        `${trackerCount} dominios con capacidad de rastreo publicitario.`,
-      );
-    if (gtm)
-      privacy.push(
-        "Google Tag Manager carga scripts de terceros dinámicamente: el HTML inicial es solo el arranque.",
-      );
-    if (!https) privacy.push("La conexión no viaja cifrada (HTTP).");
-    if (!hasCsp)
-      privacy.push(
-        "Sin Content-Security-Policy: el navegador ejecuta cualquier script que la página cargue.",
-      );
-    if (insecureCookies > 0)
-      privacy.push(`${insecureCookies} cookies sin flag Secure o HttpOnly.`);
-    if (/fingerprint/i.test(lower))
-      privacy.push("Posible fingerprinting de dispositivos.");
+      // --- cadena de causalidad ---
+      const chain = [rootHost];
+      if (gtm) chain.push("GTM");
+      if (chainTechs.some((t) => t.name.includes("Google Analytics")))
+        chain.push("Google Analytics");
+      if (scriptRequests.length) chain.push(`${scriptRequests.length} scripts`);
+      if (externalDomains.length)
+        chain.push(`${externalDomains.length} dominios externos`);
+      if (trackerCount) chain.push(`${trackerCount} trackers`);
 
-    // --- grafo ---
-    let seq = 0;
-    const nodes: BackendGraphNode[] = [];
-    const push = (node: NewGraphNode): string => {
-      const id = `${node.kind}-${seq++}`;
-      nodes.push({ ...node, id });
-      return id;
-    };
-
-    const rootId = push({
-      kind: "root",
-      label: rootHost,
-      parent: null,
-      details: {
-        title,
+      const summary = {
+        url: target.toString(),
         finalUrl,
+        domain: rootHost,
+        title,
         https,
-        status: res.status,
+        status,
         loadTimeMs,
-        sizeKb: Math.round(scan.length / 1024),
-        scriptsTotal: scripts.length,
+        sizeKb: Math.round(html.length / 1024),
+        scriptsTotal: scriptRequests.length,
         scriptsThirdParty: thirdPartyScripts,
-        thirdPartyDomains: externalDomains.length,
+        externalDomains: externalDomains.length,
         trackers: trackerCount,
-        cookies: setCookies.length,
-      },
-    });
+        cookies: cookies.length,
+        headers,
+        privacy,
+        chain,
+      };
 
-    let gtmId: string | null = null;
-    if (gtm) {
-      gtmId = push({
-        kind: "tech",
-        label: gtm.name,
-        sub: "Tag Manager",
-        parent: rootId,
-        details: {
-          category: "Tag Manager",
-          description:
-            "Carga tags de terceros dinámicamente después del arranque de la página.",
-        },
-      });
-      chainTechs.slice(0, 8).forEach((t) => {
-        push({
-          kind: "tech",
-          label: t.name,
-          sub: t.category,
-          parent: gtmId,
-          details: { category: t.category },
-        });
-      });
+      return Response.json({ ok: true, summary, nodes, rootId });
+    } finally {
+      await context.close();
     }
-
-    if (plainTechs.length) {
-      const catId = push({
-        kind: "category",
-        label: "Tecnologías",
-        count: plainTechs.length,
-        parent: rootId,
-        details: {
-          description: "Stack detectado por firmas en la superficie del HTML.",
-        },
-      });
-      plainTechs.slice(0, 12).forEach((t) => {
-        push({
-          kind: "tech",
-          label: t.name,
-          sub: t.category,
-          parent: catId,
-          details: { category: t.category },
-        });
-      });
-    }
-
-    if (scriptDomains.length) {
-      const catId = push({
-        kind: "category",
-        label: "Scripts de terceros",
-        count: thirdPartyScripts,
-        parent: rootId,
-        details: {
-          description:
-            "Dominios externos cuyos scripts e iframes se cargan desde el arranque.",
-        },
-      });
-      scriptDomains.slice(0, 8).forEach((d) => {
-        const k = classifyDomain(`${d.host} ${d.urls[0] || ""}`.toLowerCase());
-        push({
-          kind: k === "tracker" ? "tracker" : "domain",
-          label: d.host,
-          sub:
-            k === "tracker"
-              ? "rastreo"
-              : k === "analytics"
-                ? "analytics"
-                : "terceros",
-          count: (d.types.script || 0) + (d.types.iframe || 0),
-          parent: catId,
-          details: {
-            urls: d.urls,
-            types: d.types,
-            kind: k,
-            loadType: d.lazy > d.direct ? "lazy" : "direct",
-          },
-        });
-      });
-    }
-
-    if (setCookies.length) {
-      const catId = push({
-        kind: "category",
-        label: "Cookies",
-        count: setCookies.length,
-        parent: rootId,
-        details: {
-          description:
-            "Cookies establecidas por la respuesta inicial del servidor.",
-        },
-      });
-      setCookies.slice(0, 8).forEach((c) => {
-        const name = (c.split("=")[0] || "cookie").trim();
-        push({
-          kind: "cookie",
-          label: name,
-          sub: /secure/i.test(c) ? "secure" : "sin Secure",
-          parent: catId,
-          details: {
-            raw: c.slice(0, 200),
-            secure: /secure/i.test(c),
-            httponly: /httponly/i.test(c),
-            samesite: (/samesite=([^;]+)/i.exec(c) || [])[1] || null,
-          },
-        });
-      });
-    }
-
-    if (fontDomains.length) {
-      const catId = push({
-        kind: "category",
-        label: "Fuentes & assets",
-        count: fontDomains.length,
-        parent: rootId,
-        details: { description: "Tipografías y recursos externos de estilo." },
-      });
-      fontDomains.slice(0, 6).forEach((d) => {
-        push({
-          kind: "font",
-          label: d.host,
-          sub: "fuente",
-          parent: catId,
-          details: { urls: d.urls, types: d.types },
-        });
-      });
-    }
-
-    // --- cadena de causalidad ---
-    const chain = [rootHost];
-    if (gtm) chain.push("GTM");
-    if (chainTechs.some((t) => t.name.includes("Google Analytics")))
-      chain.push("Google Analytics");
-    if (scripts.length) chain.push(`${scripts.length} scripts`);
-    if (externalDomains.length)
-      chain.push(`${externalDomains.length} dominios externos`);
-    if (trackerCount) chain.push(`${trackerCount} trackers`);
-
-    const summary = {
-      url: target.toString(),
-      finalUrl,
-      domain: rootHost,
-      title,
-      https,
-      status: res.status,
-      loadTimeMs,
-      sizeKb: Math.round(scan.length / 1024),
-      scriptsTotal: scripts.length,
-      scriptsThirdParty: thirdPartyScripts,
-      externalDomains: externalDomains.length,
-      trackers: trackerCount,
-      cookies: setCookies.length,
-      headers,
-      privacy,
-      chain,
-    };
-
-    return Response.json({ ok: true, summary, nodes, rootId });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return Response.json(
