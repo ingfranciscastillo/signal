@@ -1,0 +1,752 @@
+// Signal · analyzeUrl — inspecciona la superficie de una web y construye el grafo de relaciones.
+
+interface TechSignature {
+  name: string;
+  category: string;
+  kind: "tagmanager" | "analytics" | "tracker" | "tech";
+  match: string[];
+}
+
+const TECH_SIGNATURES: TechSignature[] = [
+  {
+    name: "Google Tag Manager",
+    category: "Tag Manager",
+    kind: "tagmanager",
+    match: ["googletagmanager.com/gtm.js", "dataLayer"],
+  },
+  {
+    name: "Google Analytics 4",
+    category: "Analytics",
+    kind: "analytics",
+    match: ["gtag(", "google-analytics.com", "googletagmanager.com/gtag"],
+  },
+  {
+    name: "Facebook Pixel",
+    category: "Tracking social",
+    kind: "tracker",
+    match: ["connect.facebook.net", "fbevents.js", "fbq("],
+  },
+  {
+    name: "Hotjar",
+    category: "Analytics",
+    kind: "analytics",
+    match: ["hotjar", "hj("],
+  },
+  {
+    name: "Microsoft Clarity",
+    category: "Analytics",
+    kind: "analytics",
+    match: ["clarity.ms", "clarity("],
+  },
+  {
+    name: "Segment",
+    category: "Analytics",
+    kind: "analytics",
+    match: ["cdn.segment.com", "segment.io"],
+  },
+  {
+    name: "Mixpanel",
+    category: "Analytics",
+    kind: "analytics",
+    match: ["mixpanel"],
+  },
+  {
+    name: "Amplitude",
+    category: "Analytics",
+    kind: "analytics",
+    match: ["amplitude"],
+  },
+  {
+    name: "Intercom",
+    category: "Soporte",
+    kind: "analytics",
+    match: ["intercom"],
+  },
+  {
+    name: "HubSpot",
+    category: "Marketing",
+    kind: "analytics",
+    match: ["hs-scripts.com", "hubspot"],
+  },
+  {
+    name: "LinkedIn Insight Tag",
+    category: "Tracking social",
+    kind: "tracker",
+    match: ["snap.licdn.com", "_linkedin_partner_id"],
+  },
+  {
+    name: "TikTok Pixel",
+    category: "Tracking social",
+    kind: "tracker",
+    match: ["analytics.tiktok.com"],
+  },
+  {
+    name: "Pinterest Tag",
+    category: "Tracking social",
+    kind: "tracker",
+    match: ["ct.pinterest.com", "pintrk("],
+  },
+  {
+    name: "X Ads Pixel",
+    category: "Tracking social",
+    kind: "tracker",
+    match: ["static.ads-twitter.com"],
+  },
+  {
+    name: "Bing UET",
+    category: "Tracking social",
+    kind: "tracker",
+    match: ["bat.bing.com"],
+  },
+  { name: "Stripe", category: "Pagos", kind: "tech", match: ["js.stripe.com"] },
+  {
+    name: "PayPal",
+    category: "Pagos",
+    kind: "tech",
+    match: ["paypal.com/sdk", "paypalobjects"],
+  },
+  {
+    name: "reCAPTCHA",
+    category: "Seguridad",
+    kind: "tech",
+    match: ["recaptcha"],
+  },
+  {
+    name: "WordPress",
+    category: "CMS",
+    kind: "tech",
+    match: ["wp-content", "wp-includes"],
+  },
+  {
+    name: "Shopify",
+    category: "E-commerce",
+    kind: "tech",
+    match: ["cdn.shopify.com"],
+  },
+  {
+    name: "Wix",
+    category: "CMS",
+    kind: "tech",
+    match: ["static.wixstatic.com", "wix.com"],
+  },
+  {
+    name: "Squarespace",
+    category: "CMS",
+    kind: "tech",
+    match: ["squarespace"],
+  },
+  { name: "Webflow", category: "CMS", kind: "tech", match: ["webflow"] },
+  {
+    name: "Next.js",
+    category: "Framework",
+    kind: "tech",
+    match: ["/_next/", "__next"],
+  },
+  {
+    name: "Nuxt",
+    category: "Framework",
+    kind: "tech",
+    match: ["/_nuxt/", "__nuxt"],
+  },
+  {
+    name: "React",
+    category: "Framework",
+    kind: "tech",
+    match: ["data-reactroot", "_reactlistening", "react-dom"],
+  },
+  {
+    name: "Vue",
+    category: "Framework",
+    kind: "tech",
+    match: ["data-v-", "vuejs"],
+  },
+  {
+    name: "Angular",
+    category: "Framework",
+    kind: "tech",
+    match: ["ng-version", "angular.io"],
+  },
+  { name: "Svelte", category: "Framework", kind: "tech", match: ["svelte"] },
+  { name: "jQuery", category: "Librería", kind: "tech", match: ["jquery"] },
+  { name: "Bootstrap", category: "UI", kind: "tech", match: ["bootstrap"] },
+  {
+    name: "Google Fonts",
+    category: "Fuentes",
+    kind: "tech",
+    match: ["fonts.googleapis.com"],
+  },
+  {
+    name: "Adobe Fonts",
+    category: "Fuentes",
+    kind: "tech",
+    match: ["use.typekit.net", "typekit"],
+  },
+  {
+    name: "Font Awesome",
+    category: "Fuentes",
+    kind: "tech",
+    match: ["fontawesome", "font-awesome"],
+  },
+  {
+    name: "Cloudflare",
+    category: "Infraestructura",
+    kind: "tech",
+    match: ["cdn-cgi", "cloudflare"],
+  },
+  {
+    name: "Sentry",
+    category: "Monitorización",
+    kind: "tech",
+    match: ["sentry"],
+  },
+  {
+    name: "Datadog",
+    category: "Monitorización",
+    kind: "tech",
+    match: ["datadog", "ddog"],
+  },
+  {
+    name: "Google Maps",
+    category: "Servicios",
+    kind: "tech",
+    match: ["maps.googleapis.com/maps", "maps.google.com"],
+  },
+  {
+    name: "YouTube Embed",
+    category: "Servicios",
+    kind: "tech",
+    match: ["youtube.com/embed", "youtube-nocookie"],
+  },
+  {
+    name: "Vimeo",
+    category: "Servicios",
+    kind: "tech",
+    match: ["player.vimeo.com", "vimeo.com"],
+  },
+  {
+    name: "OneTrust",
+    category: "Consentimiento",
+    kind: "tech",
+    match: ["onetrust", "cookielaw.org"],
+  },
+  {
+    name: "Cookiebot",
+    category: "Consentimiento",
+    kind: "tech",
+    match: ["cookiebot"],
+  },
+];
+
+const TRACKER_SUBSTRINGS = [
+  "doubleclick",
+  "googlesyndication",
+  "googleadservices",
+  "criteo",
+  "taboola",
+  "outbrain",
+  "adroll",
+  "scorecardresearch",
+  "quantserve",
+  "amazon-adsystem",
+  "adnxs",
+  "rubiconproject",
+  "pubmatic",
+  "openx",
+  "smartadserver",
+  "moatads",
+  "adform",
+  "sharethrough",
+  "ads-twitter",
+  "snap.licdn",
+  "bat.bing",
+  "analytics.tiktok",
+  "ct.pinterest",
+  "connect.facebook",
+  "fingerprint",
+];
+const ANALYTICS_SUBSTRINGS = [
+  "google-analytics",
+  "googletagmanager",
+  "segment.com",
+  "segment.io",
+  "mixpanel",
+  "amplitude",
+  "hotjar",
+  "clarity.ms",
+  "fullstory",
+  "heap.io",
+  "mouseflow",
+  "luckyorange",
+  "statcounter",
+  "matomo",
+  "plausible",
+  "newrelic",
+  "nr-data",
+  "go-mpulse",
+  "chartbeat",
+  "optimizely",
+];
+const FONT_SUBSTRINGS = [
+  "fonts.googleapis",
+  "fonts.gstatic",
+  "use.typekit",
+  "typekit.net",
+  "fontawesome",
+  "font-awesome",
+  "use.fontawesome",
+  "fonts.bunny",
+  "fonts.shopify",
+];
+
+type DomainClass = "tracker" | "analytics" | "font" | "other";
+
+function classifyDomain(hay: string): DomainClass {
+  if (TRACKER_SUBSTRINGS.some((s) => hay.includes(s))) return "tracker";
+  if (ANALYTICS_SUBSTRINGS.some((s) => hay.includes(s))) return "analytics";
+  if (FONT_SUBSTRINGS.some((s) => hay.includes(s))) return "font";
+  return "other";
+}
+
+interface DomainEntry {
+  host: string;
+  urls: string[];
+  types: Record<string, number>;
+  lazy: number;
+  direct: number;
+}
+
+interface BackendGraphNode {
+  id: string;
+  kind: string;
+  label: string;
+  parent: string | null;
+  sub?: string;
+  count?: number;
+  details?: Record<string, unknown>;
+}
+
+type NewGraphNode = Omit<BackendGraphNode, "id">;
+
+interface AnalyzeRequestBody {
+  url?: unknown;
+}
+
+export async function POST(req: Request) {
+  try {
+    let body: AnalyzeRequestBody;
+    try {
+      body = (await req.json()) as AnalyzeRequestBody;
+    } catch {
+      return Response.json(
+        { error: "Cuerpo de la petición inválido." },
+        { status: 400 },
+      );
+    }
+    const raw = typeof body.url === "string" ? body.url.trim() : "";
+    if (!raw)
+      return Response.json({ error: "Introduce una URL." }, { status: 400 });
+    if (raw.length > 500)
+      return Response.json({ error: "URL demasiado larga." }, { status: 400 });
+    const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    let target: URL;
+    try {
+      target = new URL(candidate);
+    } catch {
+      return Response.json({ error: "URL no válida." }, { status: 400 });
+    }
+    if (target.protocol !== "http:" && target.protocol !== "https:") {
+      return Response.json(
+        { error: "Protocolo no soportado." },
+        { status: 400 },
+      );
+    }
+
+    let res: Response;
+    try {
+      res = await fetch(target.toString(), {
+        redirect: "follow",
+        headers: {
+          "user-agent":
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+          accept: "text/html,application/xhtml+xml",
+        },
+      });
+    } catch {
+      return Response.json(
+        { error: `No se pudo conectar con ${target.hostname}.` },
+        { status: 502 },
+      );
+    }
+
+    const started = Date.now();
+    const html = await res.text();
+    const loadTimeMs = Date.now() - started;
+    const finalUrl = res.url || target.toString();
+    const finalParsed = new URL(finalUrl);
+    const rootHost = finalParsed.hostname;
+    const scan = html.slice(0, 5000000);
+    const lower = scan.toLowerCase();
+
+    const rootLabels = rootHost.split(".");
+    const rootSuffix =
+      rootLabels.length >= 2 ? rootLabels.slice(-2).join(".") : rootHost;
+    const isFirstParty = (host: string) =>
+      host === rootHost || host.endsWith(`.${rootSuffix}`);
+
+    // --- extracción de recursos ---
+    // Se captura el tag completo para exponer el tipo de carga (async/defer → lazy) de cada script.
+    const scriptTags = [
+      ...scan.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi),
+    ].map((m) => ({ src: m[1], tag: m[0] }));
+    const scripts = scriptTags.map((s) => s.src);
+    const iframes = [
+      ...scan.matchAll(/<iframe\b[^>]*\bsrc=["']([^"']+)["']/gi),
+    ].map((m) => m[1]);
+    const linkTags = [...scan.matchAll(/<link\b[^>]*>/gi)].map((m) => m[0]);
+    const stylesheets = linkTags
+      .filter((t) => /stylesheet|preload|preconnect|dns-prefetch/i.test(t))
+      .map((t) => (t.match(/href=["']([^"']+)["']/i) || [])[1])
+      .filter((u): u is string => Boolean(u));
+    const images = [
+      ...scan.matchAll(/<(?:img|source)\b[^>]*\bsrc=["'](https?:[^"']+)["']/gi),
+    ].map((m) => m[1]);
+
+    const titleMatch = scan.match(/<title[^>]*>([^<]{1,200})<\/title>/i);
+    const title = titleMatch ? titleMatch[1].trim() : "";
+
+    // --- agregación por dominio ---
+    const domainMap: Record<string, DomainEntry> = {};
+    const addResource = (url: string, type: string, tag?: string) => {
+      let u: URL;
+      try {
+        u = new URL(url, finalUrl);
+      } catch {
+        return;
+      }
+      if (!u.hostname) return;
+      const key = u.hostname;
+      if (!domainMap[key])
+        domainMap[key] = { host: key, urls: [], types: {}, lazy: 0, direct: 0 };
+      const d = domainMap[key];
+      d.types[type] = (d.types[type] || 0) + 1;
+      if (tag) {
+        if (/async|defer/i.test(tag)) d.lazy += 1;
+        else d.direct += 1;
+      }
+      if (d.urls.length < 10) d.urls.push(u.toString().slice(0, 200));
+    };
+    scriptTags.forEach((s) => {
+      addResource(s.src, "script", s.tag);
+    });
+    stylesheets.forEach((u) => {
+      addResource(u, "stylesheet");
+    });
+    iframes.forEach((u) => {
+      addResource(u, "iframe");
+    });
+    images.forEach((u) => {
+      addResource(u, "image");
+    });
+
+    const externalDomains = Object.values(domainMap).filter(
+      (d) => !isFirstParty(d.host),
+    );
+    const scriptDomains = externalDomains
+      .filter((d) => (d.types.script || 0) + (d.types.iframe || 0) > 0)
+      .sort(
+        (a, b) =>
+          (b.types.script || 0) +
+          (b.types.iframe || 0) -
+          (a.types.script || 0) -
+          (a.types.iframe || 0),
+      );
+    const fontDomains = externalDomains.filter((d) =>
+      FONT_SUBSTRINGS.some((s) =>
+        `${d.host} ${d.urls[0] || ""}`.toLowerCase().includes(s),
+      ),
+    );
+
+    const thirdPartyScripts = scripts.filter((u) => {
+      try {
+        return !isFirstParty(new URL(u, finalUrl).hostname);
+      } catch {
+        return false;
+      }
+    }).length;
+
+    // --- tecnologías ---
+    const techsFound = TECH_SIGNATURES.filter((t) =>
+      t.match.some((s) => lower.includes(s)),
+    );
+    const gtm = techsFound.find((t) => t.kind === "tagmanager") || null;
+    const chainTechs = gtm
+      ? techsFound.filter((t) => t.kind === "analytics" || t.kind === "tracker")
+      : [];
+    const plainTechs = gtm
+      ? techsFound.filter(
+          (t) =>
+            t.kind !== "tagmanager" &&
+            t.kind !== "analytics" &&
+            t.kind !== "tracker",
+        )
+      : techsFound;
+
+    // --- cookies ---
+    let setCookies: string[] = [];
+    try {
+      if (typeof res.headers.getSetCookie === "function")
+        setCookies = res.headers.getSetCookie();
+    } catch {}
+    if (!setCookies.length) {
+      const sc = res.headers.get("set-cookie");
+      if (sc) setCookies = sc.split(/,(?=[^;]+?=)/);
+    }
+
+    // --- headers seleccionados ---
+    const headerNames = [
+      "server",
+      "x-powered-by",
+      "content-security-policy",
+      "strict-transport-security",
+      "x-frame-options",
+      "x-content-type-options",
+      "cache-control",
+      "via",
+      "content-type",
+      "referrer-policy",
+      "permissions-policy",
+    ];
+    const headers = headerNames
+      .map((n) => {
+        const v = res.headers.get(n);
+        return v ? { name: n, value: v.slice(0, 180) } : null;
+      })
+      .filter((h): h is { name: string; value: string } => Boolean(h));
+
+    const hasCsp = Boolean(res.headers.get("content-security-policy"));
+    const https = finalParsed.protocol === "https:";
+    const trackerDomains = externalDomains.filter(
+      (d) =>
+        classifyDomain(`${d.host} ${d.urls[0] || ""}`.toLowerCase()) ===
+        "tracker",
+    );
+    const trackerCount = new Set([
+      ...trackerDomains.map((d) => d.host),
+      ...techsFound.filter((t) => t.kind === "tracker").map((t) => t.name),
+    ]).size;
+    const insecureCookies = setCookies.filter(
+      (c) => !/secure/i.test(c) || !/httponly/i.test(c),
+    ).length;
+
+    // --- privacidad ---
+    const privacy: string[] = [];
+    if (trackerCount > 0)
+      privacy.push(
+        `${trackerCount} dominios con capacidad de rastreo publicitario.`,
+      );
+    if (gtm)
+      privacy.push(
+        "Google Tag Manager carga scripts de terceros dinámicamente: el HTML inicial es solo el arranque.",
+      );
+    if (!https) privacy.push("La conexión no viaja cifrada (HTTP).");
+    if (!hasCsp)
+      privacy.push(
+        "Sin Content-Security-Policy: el navegador ejecuta cualquier script que la página cargue.",
+      );
+    if (insecureCookies > 0)
+      privacy.push(`${insecureCookies} cookies sin flag Secure o HttpOnly.`);
+    if (/fingerprint/i.test(lower))
+      privacy.push("Posible fingerprinting de dispositivos.");
+
+    // --- grafo ---
+    let seq = 0;
+    const nodes: BackendGraphNode[] = [];
+    const push = (node: NewGraphNode): string => {
+      const id = `${node.kind}-${seq++}`;
+      nodes.push({ ...node, id });
+      return id;
+    };
+
+    const rootId = push({
+      kind: "root",
+      label: rootHost,
+      parent: null,
+      details: {
+        title,
+        finalUrl,
+        https,
+        status: res.status,
+        loadTimeMs,
+        sizeKb: Math.round(scan.length / 1024),
+        scriptsTotal: scripts.length,
+        scriptsThirdParty: thirdPartyScripts,
+        thirdPartyDomains: externalDomains.length,
+        trackers: trackerCount,
+        cookies: setCookies.length,
+      },
+    });
+
+    let gtmId: string | null = null;
+    if (gtm) {
+      gtmId = push({
+        kind: "tech",
+        label: gtm.name,
+        sub: "Tag Manager",
+        parent: rootId,
+        details: {
+          category: "Tag Manager",
+          description:
+            "Carga tags de terceros dinámicamente después del arranque de la página.",
+        },
+      });
+      chainTechs.slice(0, 8).forEach((t) => {
+        push({
+          kind: "tech",
+          label: t.name,
+          sub: t.category,
+          parent: gtmId,
+          details: { category: t.category },
+        });
+      });
+    }
+
+    if (plainTechs.length) {
+      const catId = push({
+        kind: "category",
+        label: "Tecnologías",
+        count: plainTechs.length,
+        parent: rootId,
+        details: {
+          description: "Stack detectado por firmas en la superficie del HTML.",
+        },
+      });
+      plainTechs.slice(0, 12).forEach((t) => {
+        push({
+          kind: "tech",
+          label: t.name,
+          sub: t.category,
+          parent: catId,
+          details: { category: t.category },
+        });
+      });
+    }
+
+    if (scriptDomains.length) {
+      const catId = push({
+        kind: "category",
+        label: "Scripts de terceros",
+        count: thirdPartyScripts,
+        parent: rootId,
+        details: {
+          description:
+            "Dominios externos cuyos scripts e iframes se cargan desde el arranque.",
+        },
+      });
+      scriptDomains.slice(0, 8).forEach((d) => {
+        const k = classifyDomain(`${d.host} ${d.urls[0] || ""}`.toLowerCase());
+        push({
+          kind: k === "tracker" ? "tracker" : "domain",
+          label: d.host,
+          sub:
+            k === "tracker"
+              ? "rastreo"
+              : k === "analytics"
+                ? "analytics"
+                : "terceros",
+          count: (d.types.script || 0) + (d.types.iframe || 0),
+          parent: catId,
+          details: {
+            urls: d.urls,
+            types: d.types,
+            kind: k,
+            loadType: d.lazy > d.direct ? "lazy" : "direct",
+          },
+        });
+      });
+    }
+
+    if (setCookies.length) {
+      const catId = push({
+        kind: "category",
+        label: "Cookies",
+        count: setCookies.length,
+        parent: rootId,
+        details: {
+          description:
+            "Cookies establecidas por la respuesta inicial del servidor.",
+        },
+      });
+      setCookies.slice(0, 8).forEach((c) => {
+        const name = (c.split("=")[0] || "cookie").trim();
+        push({
+          kind: "cookie",
+          label: name,
+          sub: /secure/i.test(c) ? "secure" : "sin Secure",
+          parent: catId,
+          details: {
+            raw: c.slice(0, 200),
+            secure: /secure/i.test(c),
+            httponly: /httponly/i.test(c),
+            samesite: (/samesite=([^;]+)/i.exec(c) || [])[1] || null,
+          },
+        });
+      });
+    }
+
+    if (fontDomains.length) {
+      const catId = push({
+        kind: "category",
+        label: "Fuentes & assets",
+        count: fontDomains.length,
+        parent: rootId,
+        details: { description: "Tipografías y recursos externos de estilo." },
+      });
+      fontDomains.slice(0, 6).forEach((d) => {
+        push({
+          kind: "font",
+          label: d.host,
+          sub: "fuente",
+          parent: catId,
+          details: { urls: d.urls, types: d.types },
+        });
+      });
+    }
+
+    // --- cadena de causalidad ---
+    const chain = [rootHost];
+    if (gtm) chain.push("GTM");
+    if (chainTechs.some((t) => t.name.includes("Google Analytics")))
+      chain.push("Google Analytics");
+    if (scripts.length) chain.push(`${scripts.length} scripts`);
+    if (externalDomains.length)
+      chain.push(`${externalDomains.length} dominios externos`);
+    if (trackerCount) chain.push(`${trackerCount} trackers`);
+
+    const summary = {
+      url: target.toString(),
+      finalUrl,
+      domain: rootHost,
+      title,
+      https,
+      status: res.status,
+      loadTimeMs,
+      sizeKb: Math.round(scan.length / 1024),
+      scriptsTotal: scripts.length,
+      scriptsThirdParty: thirdPartyScripts,
+      externalDomains: externalDomains.length,
+      trackers: trackerCount,
+      cookies: setCookies.length,
+      headers,
+      privacy,
+      chain,
+    };
+
+    return Response.json({ ok: true, summary, nodes, rootId });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return Response.json(
+      { error: `No se pudo analizar la URL: ${message}` },
+      { status: 500 },
+    );
+  }
+}
