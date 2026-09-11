@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { ArrowRight } from "@phosphor-icons/react";
+import { useState } from "react";
 
 interface UrlFormProps {
   onAnalyze: (url: string) => void;

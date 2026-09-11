@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Moon, Sun } from "@phosphor-icons/react";
+import { useEffect, useState } from "react";
 
 export default function ThemeToggle() {
   const [dark, setDark] = useState(
@@ -18,6 +18,7 @@ export default function ThemeToggle() {
 
   return (
     <button
+      type="button"
       onClick={() => setDark(!dark)}
       aria-label={dark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
       className="grid h-9 w-9 place-items-center rounded-full border border-line text-mist transition-colors hover:border-ink hover:text-ink"
