@@ -525,6 +525,56 @@ export async function POST(req: Request) {
         .catch(() => {});
       const loadTimeMs = Date.now() - started;
 
+      const vitals = await page
+        .evaluate(() => {
+          const result: {
+            lcpMs: number | null;
+            cls: number;
+            ttfbMs: number | null;
+          } = {
+            lcpMs: null,
+            cls: 0,
+            ttfbMs: null,
+          };
+          try {
+            const nav = performance.getEntriesByType(
+              "navigation",
+            )[0] as PerformanceNavigationTiming;
+            if (nav) result.ttfbMs = Math.round(nav.responseStart);
+          } catch {}
+
+          return new Promise<typeof result>((resolve) => {
+            let lcp: number | null = null;
+            let cls = 0;
+            try {
+              new PerformanceObserver((list) => {
+                const entries = list.getEntries();
+                const last = entries[entries.length - 1];
+                if (last) lcp = Math.round(last.startTime);
+              }).observe({ type: "largest-contentful-paint", buffered: true });
+            } catch {}
+            try {
+              new PerformanceObserver((list) => {
+                for (const entry of list.getEntries()) {
+                  const shift = entry as PerformanceEntry & {
+                    hadRecentInput?: boolean;
+                    value?: number;
+                  };
+                  if (!shift.hadRecentInput) cls += shift.value || 0;
+                }
+              }).observe({ type: "layout-shift", buffered: true });
+            } catch {}
+            // deja un instante a los PerformanceObserver para volcar las entradas
+            // ya bufferizadas (LCP/CLS ocurrieron durante la carga, antes de este evaluate).
+            setTimeout(() => {
+              result.lcpMs = lcp;
+              result.cls = Math.round(cls * 1000) / 1000;
+              resolve(result);
+            }, 100);
+          });
+        })
+        .catch(() => ({ lcpMs: null, cls: 0, ttfbMs: null }));
+
       const html = await page.content();
       const title = await page.title();
       const finalUrl = page.url();
@@ -718,6 +768,9 @@ export async function POST(req: Request) {
           thirdPartyDomains: externalDomains.length,
           trackers: trackerCount,
           cookies: cookies.length,
+          lcpMs: vitals.lcpMs,
+          cls: vitals.cls,
+          ttfbMs: vitals.ttfbMs,
         },
       });
 
@@ -875,6 +928,9 @@ export async function POST(req: Request) {
         externalDomains: externalDomains.length,
         trackers: trackerCount,
         cookies: cookies.length,
+        lcpMs: vitals.lcpMs,
+        cls: vitals.cls,
+        ttfbMs: vitals.ttfbMs,
         headers,
         privacy,
         chain,

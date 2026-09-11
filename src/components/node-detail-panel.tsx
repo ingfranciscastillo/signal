@@ -20,6 +20,9 @@ interface NodeDetails {
   thirdPartyDomains?: number;
   trackers?: number;
   cookies?: number;
+  lcpMs?: number | null;
+  cls?: number | null;
+  ttfbMs?: number | null;
   title?: string;
   category?: string;
   description?: string;
@@ -105,6 +108,15 @@ export default function NodeDetailPanel({
           <Metric label="Dominios externos" value={d.thirdPartyDomains} />
           <Metric label="Trackers" value={d.trackers} />
           <Metric label="Cookies" value={d.cookies} />
+          <Metric
+            label="TTFB"
+            value={d.ttfbMs != null ? `${Math.round(d.ttfbMs)} ms` : "—"}
+          />
+          <Metric
+            label="LCP"
+            value={d.lcpMs != null ? `${Math.round(d.lcpMs)} ms` : "—"}
+          />
+          <Metric label="CLS" value={d.cls != null ? d.cls.toFixed(3) : "—"} />
         </div>
         {d.title && (
           <p className="font-heading text-sm italic text-mist">“{d.title}”</p>
