@@ -1,26 +1,234 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* shadcn — superficies y estado, derivadas de los canales HSL de :root/.dark */
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+  --color-sidebar: hsl(var(--sidebar-background));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Signal — tokens de superficie/severidad OKLCH, derivados de :root/.dark */
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-ink: var(--fg);
+  --color-mist: var(--fg-muted);
+  --color-panel: var(--panel);
+  --color-canvas: var(--bg);
+  --color-line: var(--line);
+  --color-signal: var(--signal);
+  --color-signal-soft: var(--signal-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-node-neutral: var(--node-neutral);
 }
 
-@media (prefers-color-scheme: dark) {
+@theme {
+  /* Tipografía: sans geométrica para UI, mono para datos técnicos */
+  --font-heading: "General Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "General Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "General Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace;
+}
+
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* shadcn — canales HSL aproximados a la paleta OKLCH de Signal */
+    --background: 75 20% 96%;
+    --foreground: 228 30% 14%;
+    --card: 0 0% 99%;
+    --card-foreground: 228 30% 14%;
+    --popover: 0 0% 99%;
+    --popover-foreground: 228 30% 14%;
+    --primary: 165 65% 30%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 70 16% 93%;
+    --secondary-foreground: 228 30% 14%;
+    --muted: 70 16% 93%;
+    --muted-foreground: 228 12% 45%;
+    --accent: 70 16% 93%;
+    --accent-foreground: 228 30% 14%;
+    --destructive: 25 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 70 16% 86%;
+    --input: 70 16% 86%;
+    --ring: 165 65% 30%;
+    --chart-1: 165 58% 34%;
+    --chart-2: 75 45% 55%;
+    --chart-3: 25 60% 45%;
+    --chart-4: 250 20% 45%;
+    --chart-5: 90 30% 40%;
+    --radius: 0.5rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 165 65% 30%;
+
+    /* Signal · tokens OKLCH (modo claro) */
+    --bg: oklch(0.97 0.008 90);
+    --fg: oklch(0.2 0.015 250);
+    --fg-muted: oklch(0.5 0.012 250);
+    --panel: oklch(0.99 0.004 90);
+    --line: oklch(0.88 0.012 90);
+    --signal: oklch(0.55 0.13 165);
+    --signal-soft: oklch(0.92 0.045 165);
+    --warning: oklch(0.68 0.13 75);
+    --warning-soft: oklch(0.94 0.05 75);
+    --danger: oklch(0.58 0.16 25);
+    --danger-soft: oklch(0.93 0.04 25);
+    --node-neutral: oklch(0.85 0.01 250);
+  }
+
+  .dark {
+    /* shadcn — canales HSL aproximados (oscuro) */
+    --background: 232 20% 10%;
+    --foreground: 75 12% 92%;
+    --card: 232 18% 13%;
+    --card-foreground: 75 12% 92%;
+    --popover: 232 18% 13%;
+    --popover-foreground: 75 12% 92%;
+    --primary: 165 60% 45%;
+    --primary-foreground: 232 20% 10%;
+    --secondary: 232 14% 16%;
+    --secondary-foreground: 75 12% 92%;
+    --muted: 232 14% 16%;
+    --muted-foreground: 75 8% 62%;
+    --accent: 232 14% 16%;
+    --accent-foreground: 75 12% 92%;
+    --destructive: 25 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 232 14% 21%;
+    --input: 232 14% 21%;
+    --ring: 165 60% 45%;
+    --chart-1: 165 55% 45%;
+    --chart-2: 75 45% 65%;
+    --chart-3: 25 60% 55%;
+    --chart-4: 250 20% 65%;
+    --chart-5: 90 30% 55%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 165 60% 45%;
+
+    /* Signal · tokens OKLCH (modo oscuro) */
+    --bg: oklch(0.16 0.015 250);
+    --fg: oklch(0.92 0.01 90);
+    --fg-muted: oklch(0.62 0.012 90);
+    --panel: oklch(0.2 0.015 250);
+    --line: oklch(0.28 0.015 250);
+    --signal: oklch(0.7 0.14 165);
+    --signal-soft: oklch(0.28 0.06 165);
+    --warning: oklch(0.75 0.13 75);
+    --warning-soft: oklch(0.3 0.06 75);
+    --danger: oklch(0.65 0.16 25);
+    --danger-soft: oklch(0.28 0.06 25);
+    --node-neutral: oklch(0.32 0.01 250);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--fg);
+    @apply font-body;
+    transition:
+      background-color 200ms,
+      color 200ms;
+  }
+
+  ::selection {
+    background: var(--signal-soft);
+  }
+}
+
+@layer utilities {
+  /* Pulso sonar del estado de análisis: scale 1 → 2.4, opacity fade-out ease-out, loop 1.3s */
+  .sonar-ring {
+    animation: sonar 1.3s linear infinite;
+  }
+
+  /* Pulso que recorre cada edge del grafo (dash corto sobre path normalizado a 100) */
+  .edge-pulse {
+    stroke-dasharray: 6 94;
+    animation: edge-flow linear infinite;
+  }
+
+  @keyframes sonar {
+    0% {
+      transform: scale(1);
+      opacity: 0.5;
+    }
+    55% {
+      opacity: 0.16;
+    }
+    100% {
+      transform: scale(2.4);
+      opacity: 0;
+    }
+  }
+
+  @keyframes edge-flow {
+    from {
+      stroke-dashoffset: 100;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  /* Accesibilidad de motion: sin loops ni transformaciones; el contenido entra por fade */
+  @media (prefers-reduced-motion: reduce) {
+    .sonar-ring,
+    .edge-pulse {
+      animation: none;
+    }
+  }
 }
