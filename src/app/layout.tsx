@@ -1,7 +1,15 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import localFont from "next/font/local";
+import Script from "next/script";
 import "./globals.css";
+
+const THEME_INIT_SCRIPT = `
+try {
+  var dark = localStorage.getItem("signal-theme") !== "light";
+  document.documentElement.classList.toggle("dark", dark);
+} catch (e) {}
+`;
 
 const generalSans = localFont({
   src: [
@@ -37,7 +45,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${generalSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <Script id="theme-init" strategy="beforeInteractive">
+          {THEME_INIT_SCRIPT}
+        </Script>
+        {children}
+      </body>
     </html>
   );
 }

@@ -15,7 +15,10 @@ import {
 } from "@/lib/graph-layout";
 import { severityOf } from "@/lib/severity";
 
-const MIN_K = 0.4;
+// Zoom mínimo: por debajo de esto el texto deja de ser legible cuando una categoría
+// (ej. Tecnologías) se expande con muchos nodos. Mejor dejar contenido fuera de vista
+// (se llega arrastrando) que encogerlo hasta ser ilegible.
+const MIN_K = 0.6;
 const MAX_K = 2;
 
 export interface AnalysisNode extends GraphLayoutNode {

@@ -4,12 +4,14 @@ import { Moon, Sun } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
 export default function ThemeToggle() {
-  const [dark, setDark] = useState(
-    () =>
-      (typeof window !== "undefined"
-        ? localStorage.getItem("signal-theme")
-        : null) !== "light",
-  );
+  // Arranca igual que el server (dark) para no romper la hidratación; el script inline en
+  // layout.tsx ya pinta el <html> correcto antes del paint, esto solo sincroniza el estado
+  // de React (el ícono) con la preferencia real una vez montado.
+  const [dark, setDark] = useState(true);
+
+  useEffect(() => {
+    setDark(localStorage.getItem("signal-theme") !== "light");
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
