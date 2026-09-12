@@ -1,36 +1,26 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<p align="center">
+  <img src="src/app/icon.svg" alt="Signal" width="64" height="64" />
+</p>
 
-## Getting Started
+<h1 align="center">Signal</h1>
 
-First, run the development server:
+<p align="center"><strong>Diagnóstico de superficie web en tiempo real</strong></p>
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Descripción
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Signal analiza cualquier URL y expone lo que normalmente queda oculto: qué tecnologías corre, qué scripts de terceros carga, qué trackers instala, qué cookies establece y qué tan privada es realmente la conexión.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+A diferencia de un analizador que solo lee el HTML crudo, Signal renderiza la página con un navegador headless real, así que ve exactamente lo que ve un visitante: incluyendo todo lo que se inyecta después de la carga inicial vía JavaScript (tags de Google Tag Manager, píxeles de rastreo, scripts diferidos).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Features
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Renderizado real, no un fetch.** Cada análisis ejecuta la página en Chromium (Playwright), capturando la actividad de red real durante la carga, no solo el markup inicial.
+- **Tecnologías detectadas por firma.** CMS, frameworks, pasarelas de pago, analytics, ad-tech y gestores de consentimiento.
+- **Trackers y scripts de terceros** clasificados por dominio, tipo de recurso y volumen de requests.
+- **Cookies inspeccionadas desde el navegador**, con flags reales de `Secure`, `HttpOnly` y `SameSite`.
+- **Headers de respuesta relevantes**: CSP, HSTS, `X-Frame-Options` y más.
+- **Web Vitals reales**: TTFB, LCP y CLS medidos con `PerformanceObserver`, no estimados.
+- **Señales de privacidad**: rastreo publicitario, ausencia de CSP, cookies inseguras, posible fingerprinting.
+- **Grafo de dependencias interactivo**: arrastra, haz zoom, expande o colapsa nodos para trazar la cadena de carga completa.
+- **Vista resumen** en cascada como alternativa rápida al grafo.
+- **Tema claro/oscuro** persistente.
