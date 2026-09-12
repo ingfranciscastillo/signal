@@ -1,7 +1,7 @@
 "use client";
 
 import { GithubLogo } from "@phosphor-icons/react";
-import { MotionConfig } from "motion/react";
+import { MotionConfig, motion } from "motion/react";
 import { useCallback, useRef, useState } from "react";
 import AnalysisGraph, { type AnalysisNode } from "@/components/analysis-graph";
 import Hero from "@/components/hero";
@@ -94,7 +94,7 @@ export default function Home() {
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Ver código en GitHub"
-              className="grid h-8 w-8 place-items-center rounded-full text-mist transition-colors hover:text-ink"
+              className="grid h-8 w-8 place-items-center rounded-full text-mist transition duration-150 ease-out hover:text-ink active:scale-95"
             >
               <GithubLogo className="h-4 w-4" />
             </a>
@@ -124,22 +124,52 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => setView("summary")}
-                    className={`rounded-full px-3.5 py-1 transition-colors ${view === "summary" ? "bg-ink" : "text-mist hover:text-ink"}`}
-                    style={
-                      view === "summary" ? { color: "var(--bg)" } : undefined
-                    }
+                    className="relative rounded-full px-3.5 py-1 transition-colors"
                   >
-                    resumen
+                    {view === "summary" && (
+                      <motion.span
+                        layoutId="view-pill"
+                        className="absolute inset-0 rounded-full bg-ink"
+                        transition={{
+                          type: "spring",
+                          stiffness: 500,
+                          damping: 35,
+                        }}
+                      />
+                    )}
+                    <span
+                      className={`relative z-10 ${view === "summary" ? "" : "text-mist hover:text-ink"}`}
+                      style={
+                        view === "summary" ? { color: "var(--bg)" } : undefined
+                      }
+                    >
+                      resumen
+                    </span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setView("graph")}
-                    className={`rounded-full px-3.5 py-1 transition-colors ${view === "graph" ? "bg-ink" : "text-mist hover:text-ink"}`}
-                    style={
-                      view === "graph" ? { color: "var(--bg)" } : undefined
-                    }
+                    className="relative rounded-full px-3.5 py-1 transition-colors"
                   >
-                    grafo
+                    {view === "graph" && (
+                      <motion.span
+                        layoutId="view-pill"
+                        className="absolute inset-0 rounded-full bg-ink"
+                        transition={{
+                          type: "spring",
+                          stiffness: 500,
+                          damping: 35,
+                        }}
+                      />
+                    )}
+                    <span
+                      className={`relative z-10 ${view === "graph" ? "" : "text-mist hover:text-ink"}`}
+                      style={
+                        view === "graph" ? { color: "var(--bg)" } : undefined
+                      }
+                    >
+                      grafo
+                    </span>
                   </button>
                 </div>
                 <p className="hidden font-mono text-[10px] tabular-nums text-mist sm:block">

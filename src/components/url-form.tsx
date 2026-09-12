@@ -32,7 +32,7 @@ export default function UrlForm({ onAnalyze, loading, error }: UrlFormProps) {
         <button
           type="submit"
           disabled={loading || !url.trim()}
-          className="flex shrink-0 items-center gap-2 rounded-lg bg-signal px-5 py-2.5 font-mono text-sm font-medium text-[color:var(--panel)] transition-[filter] hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+          className="flex shrink-0 items-center gap-2 rounded-lg bg-signal px-5 py-2.5 font-mono text-sm font-medium text-[color:var(--panel)] transition duration-150 ease-out hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100"
         >
           {loading ? (
             <span className="animate-pulse">escaneando…</span>
