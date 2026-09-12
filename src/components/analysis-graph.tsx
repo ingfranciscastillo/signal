@@ -346,7 +346,7 @@ export default function AnalysisGraph({ result }: AnalysisGraphProps) {
         <div
           ref={wrapRef}
           className="relative cursor-grab overflow-hidden touch-none active:cursor-grabbing"
-          style={{ height: Math.max(layout.height * transform.k + 48, 380) }}
+          style={{ height: Math.min(Math.max(layout.height + 48, 380), 640) }}
           onPointerDown={(e) => {
             dragRef.current = {
               type: "pan",

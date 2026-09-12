@@ -189,6 +189,33 @@
   ::selection {
     background: var(--signal-soft);
   }
+
+  /* Scrollbar temático: Firefox/Chrome recientes vía scrollbar-color, WebKit/Chromium vía ::-webkit-scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--line);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--mist);
+    background-clip: padding-box;
+  }
 }
 
 @layer utilities {
