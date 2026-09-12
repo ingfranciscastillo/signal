@@ -78,10 +78,8 @@ export default function Home() {
     <MotionConfig reducedMotion="user">
       <div className="min-h-screen">
         <header className="mx-auto flex max-w-6xl items-center justify-between px-4 pt-6">
-          <div className="flex items-center gap-2.5">
-            <span className="grid h-7 w-7 place-items-center rounded-md bg-signal-soft text-signal">
-              <SignalMark className="h-4 w-4" />
-            </span>
+          <div className="flex items-center gap-2">
+            <SignalMark className="h-6 w-6 text-signal" />
             <p className="font-heading text-lg font-semibold tracking-tight text-ink">
               Signal
             </p>
