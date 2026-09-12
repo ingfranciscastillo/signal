@@ -1,5 +1,6 @@
 "use client";
 
+import { GithubLogo } from "@phosphor-icons/react";
 import { MotionConfig } from "motion/react";
 import { useCallback, useRef, useState } from "react";
 import AnalysisGraph, { type AnalysisNode } from "@/components/analysis-graph";
@@ -76,8 +77,8 @@ export default function Home() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="min-h-screen">
-        <header className="mx-auto flex max-w-6xl items-center justify-between px-4 pt-6">
+      <div className="flex min-h-screen flex-col">
+        <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 pt-6">
           <div className="flex items-center gap-2">
             <SignalMark className="h-6 w-6 text-signal" />
             <p className="font-heading text-lg font-semibold tracking-tight text-ink">
@@ -88,6 +89,15 @@ export default function Home() {
             <p className="hidden font-mono text-[10px] uppercase tracking-[0.25em] text-mist sm:block">
               web surface analysis
             </p>
+            <a
+              href="https://github.com/ingfranciscastillo/signal"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Ver código en GitHub"
+              className="grid h-8 w-8 place-items-center rounded-full text-mist transition-colors hover:text-ink"
+            >
+              <GithubLogo className="h-4 w-4" />
+            </a>
             <ThemeToggle />
           </div>
         </header>
@@ -96,7 +106,7 @@ export default function Home() {
 
         <main
           ref={resultsRef}
-          className="mx-auto max-w-6xl scroll-mt-8 px-4 pb-24"
+          className="mx-auto w-full max-w-6xl flex-1 scroll-mt-8 px-4 pb-24"
         >
           {busy && (
             <div className="flex justify-center pt-2 pb-8">
